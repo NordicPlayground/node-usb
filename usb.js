@@ -54,6 +54,7 @@ Object.defineProperty(usb.Device.prototype, "configDescriptor", {
 		try {
 			return this._configDescriptor || (this._configDescriptor = this.__getConfigDescriptor())
 		} catch(e) {
+			// Check descriptor exists
 			if (e.errno == usb.LIBUSB_ERROR_NOT_FOUND) return null;
 			throw e;
 		}
@@ -65,6 +66,7 @@ Object.defineProperty(usb.Device.prototype, "allConfigDescriptors", {
 		try {
 			return this._allConfigDescriptors || (this._allConfigDescriptors = this.__getAllConfigDescriptors())
 		} catch(e) {
+			// Check descriptors exist
 			if (e.errno == usb.LIBUSB_ERROR_NOT_FOUND) return [];
 			throw e;
 		}
@@ -162,13 +164,13 @@ usb.Device.prototype.getStringDescriptor = function (desc_index, callback) {
 
 usb.Device.prototype.getBosDescriptor = function (callback) {
 
-	if (this.deviceDescriptor.bcdDevice < 0x201) {
-		return callback(undefined, null);
+	if (this._bosDescriptor) {
+		// Cached descriptor
+		return callback(undefined, this._bosDescriptor);
 	}
 
-	this.open();
-	if (!this.configDescriptor) {
-		this.close();
+	if (this.deviceDescriptor.bcdDevice < 0x201) {
+		// BOS is only supported from USB 2.0.1
 		return callback(undefined, null);
 	}
 
@@ -180,8 +182,9 @@ usb.Device.prototype.getBosDescriptor = function (callback) {
 		usb.LIBUSB_DT_BOS_SIZE,
 		function (error, buffer) {
 			if (error) {
-				this.close();
-				return callback(undefined, null);
+				// Check BOS descriptor exists
+				if (error.errno == usb.LIBUSB_TRANSFER_STALL) return callback(undefined, null);
+				return callback(error, null);
 			}
 
 			var totalLength = buffer.readUInt16LE(2);
@@ -192,8 +195,11 @@ usb.Device.prototype.getBosDescriptor = function (callback) {
 				0,
 				totalLength,
 				function (error, buffer) {
-					this.close();
-					if (error) return callback(undefined, null);
+					if (error) {
+						// Check BOS descriptor exists
+						if (error.errno == usb.LIBUSB_TRANSFER_STALL) return callback(undefined, null);
+						return callback(error, null);
+					}
 
 					var descriptor = {
 						bLength: buffer.readUInt8(0),
@@ -216,7 +222,9 @@ usb.Device.prototype.getBosDescriptor = function (callback) {
 						i += capability.bLength;
 					}
 
-					callback(undefined, descriptor);
+					// Cache descriptor
+					this._bosDescriptor = descriptor;
+					callback(undefined, this._bosDescriptor);
 				}
 			);
 		}
@@ -225,17 +233,14 @@ usb.Device.prototype.getBosDescriptor = function (callback) {
 
 usb.Device.prototype.getCapabilities = function (callback) {
 	var capabilities = [];
+	var self = this;
 
 	this.getBosDescriptor(function(error, descriptor) {
 		if (error) return callback(error, null);
-		if (descriptor && descriptor.capabilities) {
-			for (var i = 0; i < descriptor.capabilities.length; i++) {
-				capabilities.push({
-					descriptor: descriptor.capabilities[i],
-					type: descriptor.capabilities[i].bDevCapabilityType,
-					data: descriptor.capabilities[i].dev_capability_data
-				});
-			}
+
+		var len = descriptor ? descriptor.capabilities.length : 0
+		for (var i=0; i<len; i++){
+			capabilities.push(new Capability(self, i))
 		}
 
 		callback(undefined, capabilities);
@@ -343,6 +348,14 @@ Interface.prototype.endpoint = function(addr){
 			return this.endpoints[i]
 		}
 	}
+}
+
+function Capability(device, id){
+	this.device = device
+	this.id = id
+	this.descriptor = this.device._bosDescriptor.capabilities[this.id]
+	this.type = this.descriptor.bDevCapabilityType
+	this.data = this.descriptor.dev_capability_data
 }
 
 function Endpoint(device, descriptor){
