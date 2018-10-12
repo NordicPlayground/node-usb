@@ -33,12 +33,16 @@
     "install": "node-pre-gyp install --fallback-to-build",
     "test": "mocha --compilers coffee:coffee-script --grep Module",
     "full-test": "mocha --compilers coffee:coffee-script",
-    "valgrind": "coffee -c test/usb.coffee; valgrind --leak-check=full --show-possibly-lost=no node --expose-gc --trace-gc node_modules/mocha/bin/_mocha -R spec"
+    "valgrind": "coffee -c test/usb.coffee; valgrind --leak-check=full --show-possibly-lost=no node --expose-gc --trace-gc node_modules/mocha/bin/_mocha -R spec",
+    "clean-prebuilt": "node-pre-gyp clean",
+    "package-prebuilt": "node-pre-gyp package",
+    "publish-prebuilt": "node-pre-gyp-github publish",
+    "publish-all-prebuilt": "node scripts/publish-all-prebuilt.js"
   },
   "binary": {
     "module_name": "usb_bindings",
     "module_path": "./src/binding",
-    "host": "https://github.com/tessel/node-usb/releases/download/",
+    "host": "https://github.com/NordicPlayground/node-usb/releases/download/",
     "remote_path": "{version}"
   },
   "dependencies": {
@@ -48,7 +52,8 @@
   "devDependencies": {
     "coffee-script": "~1.6.2",
     "mocha": "~1.8.2",
-    "aws-sdk": "~2.0.0-rc.15"
+    "aws-sdk": "~2.0.0-rc.15",
+    "node-pre-gyp-github": "1.3.1"
   },
   "license": "MIT"
 }
